@@ -1,12 +1,36 @@
 import sys
 from oslo_config import cfg
-from logging import getLogger
+import oslo_messaging as messaging
+import logging
+
+import time
 
 CONF = cfg.CONF
 
 
-class Server(object):
+class NotificationHandler(object):
+    def info(self, ctxt, publisher_id, event_type, payload, metadata):
+        if publisher_id == 'testing':
+            print (payload)
+            return messaging.NotificationResult.HANDLED
+
+    def warn(self, ctxt, publisher_id, event_type, payload, metadata):
+        pass
+
+    def error(self, ctxt, publisher_id, event_type, payload, metadata):
+        pass
+
+
+class ServerApp(object):
     cmd_name = 'server'
+
+    def __init__(self):
+        self.transport = messaging.get_transport(cfg.CONF)
+        self.targets = [messaging.Target(topic='notification')]
+        self.endpoints = [NotificationHandler()]
+        self.server = messaging.get_notification_listener(self.transport, self.targets,
+                                                          self.endpoints, allow_requeue=True,
+                                                          executor='blocking', pool='test')
 
     @classmethod
     def add_argument_parser(cls, subparsers):
@@ -14,11 +38,26 @@ class Server(object):
         parser.set_defaults(cmd_class=cls)
 
     def run(self):
-        print("Server is running")
+        try:
+            self.server.start()
+            LOG.info("Server started. To stop server press <Ctrl+C>.")
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            LOG.info("Server termination started")
+
+        self.server.stop()
+        self.server.wait()
+        LOG.info("Server stopped")
 
 
-class Client(object):
+class ClientApp(object):
     cmd_name = 'client'
+
+    def __init__(self):
+        self.transport = messaging.get_transport(cfg.CONF)
+        self.notifier = messaging.Notifier(self.transport, driver='messaging',
+                                           publisher_id='testing', topics=['notification'])
 
     @classmethod
     def add_argument_parser(cls, subparsers):
@@ -26,9 +65,9 @@ class Client(object):
         parser.set_defaults(cmd_class=cls)
 
     def run(self):
-        print("Client is running")
+        self.notifier.info({'some': 'context'}, 'just.testing', {'heavy': 'payload'})
 
-APPS = [Server, Client]
+APPS = [ServerApp, ClientApp]
 
 
 def add_command_parsers(subparsers):
@@ -42,7 +81,13 @@ OPTION_LIST = [COMMAND] = [
                       help='Available commands')
 ]
 
-LOG = getLogger(__name__)
+LOG = logging.getLogger("Service")
+LOG.setLevel(logging.INFO)
+ch = logging.StreamHandler()
+#ch.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s')
+ch.setFormatter(formatter)
+LOG.addHandler(ch)
 
 if __name__ == "__main__":
     CONF.register_cli_opts(OPTION_LIST)
