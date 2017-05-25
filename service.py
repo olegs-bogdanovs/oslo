@@ -10,15 +10,19 @@ CONF = cfg.CONF
 
 class NotificationHandler(object):
     def info(self, ctxt, publisher_id, event_type, payload, metadata):
-        if publisher_id == 'testing':
-            print (payload)
-            return messaging.NotificationResult.HANDLED
+        print ("info")
+        print (publisher_id)
+        print (payload)
 
     def warn(self, ctxt, publisher_id, event_type, payload, metadata):
-        pass
+        print ("warn")
+        print (publisher_id)
+        print (payload)
 
     def error(self, ctxt, publisher_id, event_type, payload, metadata):
-        pass
+        print ("error")
+        print (publisher_id)
+        print (payload)
 
 
 class ServerApp(object):
@@ -29,8 +33,8 @@ class ServerApp(object):
         self.targets = [messaging.Target(topic='notification')]
         self.endpoints = [NotificationHandler()]
         self.server = messaging.get_notification_listener(self.transport, self.targets,
-                                                          self.endpoints, allow_requeue=True,
-                                                          executor='blocking', pool='test')
+                                                          self.endpoints, executor='blocking',
+                                                          pool='test')
 
     @classmethod
     def add_argument_parser(cls, subparsers):
@@ -48,7 +52,7 @@ class ServerApp(object):
 
         self.server.stop()
         self.server.wait()
-        LOG.info("Server stopped")
+        LOG.info("Server is terminated")
 
 
 class ClientApp(object):
@@ -63,9 +67,24 @@ class ClientApp(object):
     def add_argument_parser(cls, subparsers):
         parser = subparsers.add_parser(cls.cmd_name, help='This command runs client')
         parser.set_defaults(cmd_class=cls)
+        parser.add_argument('-i', '--info',  action='store_true', default=False,
+                            help='INFO Message level (Used as default if None selected)')
+
+        parser.add_argument('-w', '--warn',  action='store_true', default=False,
+                            help='WARN Message level')
+
+        parser.add_argument('-e', '--error',  action='store_true', default=False,
+                            help='ERROR Message level')
+
+        parser.add_argument('-p', '--producer-id', default="producer",
+                            help="Sets producer_id")
+
+        parser.add_argument('json', metavar='<path to json file>', help="Path to JSON file")
 
     def run(self):
-        self.notifier.info({'some': 'context'}, 'just.testing', {'heavy': 'payload'})
+        print CONF.command.info
+        print CONF.command.json
+        print self.notifier.info({'some': 'context'}, 'just.testing', {'heavy': 'payload'})
 
 APPS = [ServerApp, ClientApp]
 
@@ -84,7 +103,6 @@ OPTION_LIST = [COMMAND] = [
 LOG = logging.getLogger("Service")
 LOG.setLevel(logging.INFO)
 ch = logging.StreamHandler()
-#ch.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s')
 ch.setFormatter(formatter)
 LOG.addHandler(ch)
