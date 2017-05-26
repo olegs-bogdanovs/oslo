@@ -2,7 +2,7 @@ import sys
 from oslo_config import cfg
 import oslo_messaging as messaging
 import logging
-
+import json
 import time
 
 CONF = cfg.CONF
@@ -10,19 +10,20 @@ CONF = cfg.CONF
 
 class NotificationHandler(object):
     def info(self, ctxt, publisher_id, event_type, payload, metadata):
-        print ("info")
-        print (publisher_id)
-        print (payload)
+        self.handle_message(ctxt, publisher_id, event_type, payload, metadata, level="INFO")
 
     def warn(self, ctxt, publisher_id, event_type, payload, metadata):
-        print ("warn")
-        print (publisher_id)
-        print (payload)
+        self.handle_message(ctxt, publisher_id, event_type, payload, metadata, level="WARN")
 
     def error(self, ctxt, publisher_id, event_type, payload, metadata):
-        print ("error")
-        print (publisher_id)
-        print (payload)
+        self.handle_message(ctxt, publisher_id, event_type, payload, metadata, level="ERROR")
+
+    def handle_message(self, ctx, publisher_id, event_type, payload, metadata, level):
+        LOG.info("Message with %s level received." % level)
+        print ("publisher id: \t %s" % publisher_id)
+        print ("event type: \t %s" % event_type)
+        print ("payload: ")
+        print json.dumps(dict(payload), separators=(',', ':'), indent=4)
 
 
 class ServerApp(object):
@@ -68,7 +69,7 @@ class ClientApp(object):
         parser = subparsers.add_parser(cls.cmd_name, help='This command runs client')
         parser.set_defaults(cmd_class=cls)
         parser.add_argument('-i', '--info',  action='store_true', default=False,
-                            help='INFO Message level (Used as default if None selected)')
+                            help='INFO Message level')
 
         parser.add_argument('-w', '--warn',  action='store_true', default=False,
                             help='WARN Message level')
@@ -82,9 +83,24 @@ class ClientApp(object):
         parser.add_argument('json', metavar='<path to json file>', help="Path to JSON file")
 
     def run(self):
-        print CONF.command.info
-        print CONF.command.json
-        print self.notifier.info({'some': 'context'}, 'just.testing', {'heavy': 'payload'})
+        try:
+            with open(CONF.command.json) as json_data:
+                data = json.load(json_data)
+                json_data.close()
+        except IOError as e:
+            LOG.error(e)
+            sys.exit(1)
+        except ValueError as e:
+            LOG.error("%s file validation error. %s" % (CONF.command.json, e))
+            sys.exit(1)
+
+        if CONF.command.info:
+            self.notifier.info({}, 'just.testing', data)
+        if CONF.command.warn:
+            self.notifier.warn({}, 'just.testing', data)
+        if CONF.command.error:
+            self.notifier.error({}, 'just.testing', data)
+
 
 APPS = [ServerApp, ClientApp]
 
