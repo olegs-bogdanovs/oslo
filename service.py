@@ -80,7 +80,7 @@ class ClientApp(object):
     def __init__(self):
         self.transport = messaging.get_transport(cfg.CONF)
         self.notifier = messaging.Notifier(self.transport, driver='messaging',
-                                           publisher_id='testing', topics=['notification'])
+                                           publisher_id=CONF.command.producer_id, topics=['notification'])
 
     @classmethod
     def add_argument_parser(cls, subparsers):
@@ -95,8 +95,11 @@ class ClientApp(object):
         parser.add_argument('-e', '--error', action='store_true', default=False,
                             help='ERROR Message level')
 
-        parser.add_argument('-p', '--producer-id', default="producer",
+        parser.add_argument('-p', '--producer-id', default="default",
                             help="Sets producer_id")
+
+        parser.add_argument('-t', '--event-type', default="vm.info",
+                            help="Sets event type")
 
         parser.add_argument('json', metavar='<path to json file>', help="Path to JSON file")
 
@@ -113,11 +116,11 @@ class ClientApp(object):
             sys.exit(1)
 
         if CONF.command.info:
-            self.notifier.info({}, 'vm.info', data)
+            self.notifier.info({}, CONF.command.event_type, data)
         if CONF.command.warn:
-            self.notifier.warn({}, 'vm.info', data)
+            self.notifier.warn({}, CONF.command.event_type, data)
         if CONF.command.error:
-            self.notifier.error({}, 'vm.info', data)
+            self.notifier.error({}, CONF.command.event_type, data)
 
 
 def add_command_parsers(subparsers):
