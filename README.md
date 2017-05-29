@@ -6,12 +6,12 @@ To install rabbitmq locally:
 sudo apt-get install rabbitmq-server
 ```
 
-##To start server
+## To start server
 ```
 python service.py server
 ```
 
-##To send message
+## To send message
 ```
 python servoce.py client -i test.json
 ```
