@@ -4,11 +4,25 @@ import oslo_messaging as messaging
 import logging
 import json
 import time
+import jsonschema
+from jsonschema import validate
 
 CONF = cfg.CONF
 
 
 class NotificationHandler(object):
+    schema = {
+        "type": "object",
+        "properties": {
+            "instanceID": {"type": "string"},
+            "instanceName": {"type": "string"},
+            "ram": {"type": "number"},
+            "cpu": {"type": "number"},
+            "flavor": {"type": "string"},
+        },
+        "required": ["instanceID", "instanceName", "ram", "cpu", "flavor"]
+    }
+
     def info(self, ctxt, publisher_id, event_type, payload, metadata):
         self.handle_message(ctxt, publisher_id, event_type, payload, metadata, level="INFO")
 
@@ -19,11 +33,15 @@ class NotificationHandler(object):
         self.handle_message(ctxt, publisher_id, event_type, payload, metadata, level="ERROR")
 
     def handle_message(self, ctx, publisher_id, event_type, payload, metadata, level):
-        LOG.info("Message with %s level received." % level)
-        print ("publisher id: \t %s" % publisher_id)
-        print ("event type: \t %s" % event_type)
-        print ("payload: ")
-        print json.dumps(dict(payload), separators=(',', ':'), indent=4)
+        try:
+            validate(payload, self.schema)
+            LOG.info("Message with %s level received." % level)
+            print ("publisher id: \t %s" % publisher_id)
+            print ("event type: \t %s" % event_type)
+            print ("payload: ")
+            print json.dumps(dict(payload), separators=(',', ':'), indent=4)
+        except jsonschema.exceptions.ValidationError as ve:
+            LOG.error("Message validation error: %s" % ve)
 
 
 class ServerApp(object):
@@ -68,13 +86,13 @@ class ClientApp(object):
     def add_argument_parser(cls, subparsers):
         parser = subparsers.add_parser(cls.cmd_name, help='This command runs client')
         parser.set_defaults(cmd_class=cls)
-        parser.add_argument('-i', '--info',  action='store_true', default=False,
+        parser.add_argument('-i', '--info', action='store_true', default=False,
                             help='INFO Message level')
 
-        parser.add_argument('-w', '--warn',  action='store_true', default=False,
+        parser.add_argument('-w', '--warn', action='store_true', default=False,
                             help='WARN Message level')
 
-        parser.add_argument('-e', '--error',  action='store_true', default=False,
+        parser.add_argument('-e', '--error', action='store_true', default=False,
                             help='ERROR Message level')
 
         parser.add_argument('-p', '--producer-id', default="producer",
@@ -87,22 +105,19 @@ class ClientApp(object):
             with open(CONF.command.json) as json_data:
                 data = json.load(json_data)
                 json_data.close()
-        except IOError as e:
-            LOG.error(e)
+        except IOError as ioe:
+            LOG.error(ioe)
             sys.exit(1)
-        except ValueError as e:
-            LOG.error("%s file validation error. %s" % (CONF.command.json, e))
+        except ValueError as ve:
+            LOG.error("%s file validation error. %s" % (CONF.command.json, ve))
             sys.exit(1)
 
         if CONF.command.info:
-            self.notifier.info({}, 'just.testing', data)
+            self.notifier.info({}, 'vm.info', data)
         if CONF.command.warn:
-            self.notifier.warn({}, 'just.testing', data)
+            self.notifier.warn({}, 'vm.info', data)
         if CONF.command.error:
-            self.notifier.error({}, 'just.testing', data)
-
-
-APPS = [ServerApp, ClientApp]
+            self.notifier.error({}, 'vm.info', data)
 
 
 def add_command_parsers(subparsers):
@@ -115,6 +130,8 @@ OPTION_LIST = [COMMAND] = [
                       handler=add_command_parsers,
                       help='Available commands')
 ]
+
+APPS = [ServerApp, ClientApp]
 
 LOG = logging.getLogger("Service")
 LOG.setLevel(logging.INFO)
@@ -137,4 +154,3 @@ if __name__ == "__main__":
 
     app = CONF.command.cmd_class()
     app.run()
-
